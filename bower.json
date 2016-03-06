@@ -1,0 +1,25 @@
+{
+  "name": "blobmarks",
+  "homepage": "https://github.com/tsileo/blobmarks",
+  "authors": [
+    "Thomas Sileo <thomas.sileo@gmail.com>"
+  ],
+  "description": "",
+  "main": "",
+  "moduleType": [
+    "globals"
+  ],
+  "license": "MIT",
+  "private": true,
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ],
+  "dependencies": {
+    "pure": "^0.6.0",
+    "ractive": "^0.7.3"
+  }
+}

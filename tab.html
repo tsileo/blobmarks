@@ -1,0 +1,280 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="stylesheet" href="extension/pure-min.css"/>
+    <style>
+  #container {
+    margin:20px auto;
+    width: 95%;
+    max-width: 960px;
+  }
+  h1, h2 { color: #333; }
+  h2 span { color: #aaa; }
+  h3, p { color: #555; }
+  a {
+    text-decoration: none;
+  }
+  .conf-link {
+    color: #aaa;
+    display: inline-block;
+    padding-top:22px;
+  }
+  .link {
+    color: #555;
+    text-decoration: underline;
+  }
+  .grey {
+    color: #aaa;
+  }
+  h2 > small { color: #ccc;font-weight:normal; }
+  .floatright {
+margin-top:10px;float:right;
+  }
+html {
+    position: relative;
+    min-height: 100%;
+}
+body {
+    margin: 0 0 50px;
+}
+#footer {
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    height: 50px;
+    width: 100%;
+color: #ccc;
+  padding-top:20px;
+  }
+  #footer a {
+    color: #aaa;
+  }
+    </style>
+  </head>
+<body>
+<div id='container'></div>
+<script id='template' type='text/ractive'>
+<div class="pure-g">
+<div class="pure-u-1-2">
+<h2><span>Blob</span>Marks <small>{{apiHostname()}}</small></h2>
+</div>
+<div class="pure-u-1-2">
+{{#config.api_key}}
+<form class="pure-form floatright" style="" on-submit="submit">
+    <input type="text" value="{{q}}">
+    <button type="submit" class="pure-button">Search</button>
+    <a href="#" class="pure-button" on-click="clear">Clear</a>
+</form>
+{{else}}
+<form class="pure-form floatright" on-submit="otp">
+        <input type="password" id="otp" value="{{otp}}" placeholder="OTP">
+        <button type="submit" class="pure-button">Sign in</button>
+</form>
+{{/config.api_key}}
+</div>
+</div>
+
+<a class="conf-link" href="#" on-click="toggle-conf">Show/hide configuration</a> 
+{{#configMode}}
+<h3>Configuration</h3>
+<form class="pure-form pure-form-aligned" on-submit="save-config">
+    <fieldset>
+        <div class="pure-control-group">
+            <label for="api_url">BlobStash URL</label>
+            <input id="api_url" value="{{config.api_url}}" type="text" placeholder="https://blobstash.com">
+        </div>
+
+        <div class="pure-control-group">
+            <label for="collection">Collection</label>
+            <input id="collection" value="{{config.collection}}" type="text">
+        </div>
+
+        <div class="pure-controls">
+        <button type="submit" class="pure-button pure-button-primary">Save</button>
+        </div>
+    </fieldset>
+</form>
+{{/configMode}}
+
+
+{{#config.api_key}}
+<div>
+{{^bookmarks}}
+<p style="margin:20px 0;font-size:1.1em;">No bookmarks :(</p>
+{{/bookmarks}}
+{{#bookmarks}}
+<div style="margin:20px 0 40px 0;">
+<a style="display:block" href="#" on-click="open-bookmark:{{this}}">
+<h3 style="padding:0;margin:0 0 5px 0;">{{title}}</h3>
+<p style="padding:0;margin:0 0 10px 0;" class="grey">{{ idTs(_id) }}</p>
+{{#selectedText}}<p class="grey" style="padding:0;margin:0 0 10px 0;">{{selectedText}}</p>{{/selectedText}}
+<p style="padding:0;margin:0;" class="link">{{url}}</p>
+</a>
+</div>
+{{/bookmarks}}
+</div>
+{{/config.api_key}}
+</script>
+<script src="extension/ractive.js"></script>
+<script src="base.js"></script>
+<script>
+function status(response) {
+  if (response.status >= 200 && response.status < 300) {
+    return Promise.resolve(response);
+  } else {
+    return Promise.reject(new Error(response.statusText));
+  }
+}
+
+function json(response) {
+  return response.json();
+}
+
+var BaseRactive = Ractive.extend({
+  mode: 'localStorage',
+  loadConfig: function(callback) {
+    var that = this;
+    if (this.mode == 'localStorage') {
+      var conf = JSON.parse(localStorage.getItem('blobmarks_config'));
+      if (conf) {
+        that.set('config', conf);
+        callback(conf);
+        that.set('configured', true);
+        that.set('configMode', false);
+        console.log('loaded conf', conf);
+        //document.getElementById("otp").focus();
+      }
+    } else {
+      chrome.storage.local.get(['api_url', 'api_key', 'collection'], function(config) {
+        console.log(config);
+        that.set('config', config);
+        that.set('configured', true);
+        that.set('configMode', false);
+        callback(config);
+        //document.getElementById("otp").focus();
+      })
+    }
+  },
+  url: function(path) {
+    var that = this;
+    var path = path || '';
+    var spath = '/api/ext/docstore/v1/' + this.get('config.collection');
+    if (path.substring(0, 4) == '/api') { 
+      spath = '';
+    }
+    return this.get('config.api_url') + spath + (path || '');
+  },
+  headers: function(headers) {
+    headers = headers || {};
+    headers['Content-Type'] = 'application/json';
+    headers['Authorization'] = 'Basic ' + btoa(":" + this.get('config.api_key'));
+    return headers;
+  },
+});
+var ractive = new BaseRactive({
+  // The `el` option can be a node, an ID, or a CSS selector.
+  el: '#container',
+
+  // We could pass in a string, but for the sake of convenience
+  // we're passing the ID of the <script> tag above.
+  template: '#template',
+  loadBookmarks: function() {
+    console.log('loadBookmarks');
+    var that = this;
+    if (that.get('config.collection')) {
+fetch(that.url(), {
+      mode: 'cors',
+      method: 'get',
+      headers: that.headers(),
+    }).then(status)
+      .then(json)
+      .then(function(data) {
+        console.log('bookmarks', data);
+        that.set('bookmarks', data);
+    });
+    }
+      },
+  search: function(q) {
+    var that = this;
+    fetch(that.url('/search?q='+q), {
+      mode: 'cors',
+      method: 'get',
+      headers: that.headers(),
+    }).then(status)
+      .then(json)
+      .then(function(data) {
+        console.log('bookmarks', data);
+        that.set('bookmarks', data);
+    });
+
+
+  },
+  complete: function() {
+        let otpInput = document.getElementById("otp");
+        console.log('otpInput', otpInput);
+        if (otpInput) { otpInput.focus(); }
+
+  },
+  oninit: function() {
+    var that = this;
+    this.loadConfig(function() {
+      that.loadBookmarks();
+    });
+    this.on('save-config', function(event) {
+      event.original.preventDefault();
+      localStorage.setItem('blobmarks_config', JSON.stringify(this.get('config')));
+      this.set('configured', true);
+      this.set('configMode', false);
+    });
+    this.on('otp', function(event) {
+      var that = this;
+      event.original.preventDefault();
+      fetch(that.url('/api/v1/perms/otp'), {
+        mode: 'cors',
+        method: 'post',
+        headers: that.headers(),
+        body: JSON.stringify({'otp': that.get('otp')}),
+      }).then(status)
+        .then(json)
+        .then(function(data) {
+          console.log('otp', data);
+          that.set('config.api_key', data.key);
+          that.set('otp', '');
+          that.loadBookmarks();
+      });
+    });
+    this.on('submit', function(event) {
+      event.original.preventDefault();
+      that.search(this.get('q'));
+    });
+    this.on('clear', function(event) {
+      event.original.preventDefault();
+      that.loadBookmarks();
+      this.set('q', '');
+    });
+    this.on('toggle-conf', function(event) {
+      event.original.preventDefault();
+      this.set('configMode', !this.get('configMode'));
+    });
+  },
+  data: {
+    q: '',
+    idTs: function(_id) {
+      return new Date(parseInt(_id.substring(0, 8), 16) * 1000);
+    },
+    apiHostname: function() {
+      if (this.get('config.api_url')) {
+        return new URL(this.get('config.api_url')).hostname;
+      }
+      return '';
+    },
+    configured: false,
+    configMode: true,
+    config: { collection: 'blobmarks' },
+  },
+});
+</script>
+</body>
+</html>
