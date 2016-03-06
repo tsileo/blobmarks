@@ -19,36 +19,23 @@
     <button type="submit" class="pure-button">Search</button>
     <a href="#" class="pure-button" on-click="clear">Clear</a>
 </form>
-{{else}}
+{{/}}
+{{^config.api_key}}
+{{#mode == 'localStorage'}}
 <form class="pure-form floatright" on-submit="otp">
         <input type="password" id="otp" value="{{otp}}" placeholder="OTP">
         <button type="submit" class="pure-button">Sign in</button>
 </form>
+{{/}}
 {{/config.api_key}}
 </div>
 </div>
 
-{{#configMode}}
-<h3>Configuration</h3>
-<form class="pure-form pure-form-aligned" on-submit="save-config">
-    <fieldset>
-        <div class="pure-control-group">
-            <label for="api_url">BlobStash URL</label>
-            <input id="api_url" value="{{config.api_url}}" type="text" placeholder="https://blobstash.com">
-        </div>
-
-        <div class="pure-control-group">
-            <label for="collection">Collection</label>
-            <input id="collection" value="{{config.collection}}" type="text">
-        </div>
-
-        <div class="pure-controls">
-        <button type="submit" class="pure-button pure-button-primary">Save</button>
-        </div>
-    </fieldset>
-</form>
-{{/configMode}}
-
+{{^config.api_key}}
+{{#mode == 'localStorage'}}
+<p>Spin up a <a href="https://github.com/tsileo/blobstash">BlobStash</a> instance and install the plugin to get started.</p>
+{{/}}
+{{/config.api_key}}
 
 {{#config.api_key}}
 <div>
@@ -69,11 +56,52 @@
 {{/config.api_key}}
 
 <div id="footer">
-<a class="conf-link" href="#" on-click="toggle-conf">Show/hide configuration</a> 
+Powered by <a href="https://github.com/tsileo/blobmarks">BlobMarks</a> and <a href="https://github.com/tsileo/blobstash">BlobStash</a> -
+ <a class="conf-link" href="#" on-click="toggle-conf">Show/hide configuration</a> 
 </div>
+
+{{#configMode}}
+<h3>Configuration</h3>
+<form class="pure-form pure-form-aligned" on-submit="save-config">
+    <fieldset>
+        <div class="pure-control-group">
+            <label for="api_url">BlobStash URL</label>
+            <input id="api_url" value="{{config.api_url}}" type="text" placeholder="https://blobstash.com">
+        </div>
+
+        {{#mode == 'extension'}}
+        <div class="pure-control-group">
+            <label for="api_key">API Key</label>
+            <input id="api_key" value="{{config.api_key}}" type="password">
+        </div>
+        {{/}}
+
+        <div class="pure-control-group">
+            <label for="collection">Collection</label>
+            <input id="collection" value="{{config.collection}}" type="text">
+        </div>
+
+        <div class="pure-controls">
+        <button type="submit" class="pure-button pure-button-primary">Save</button>
+        </div>
+    </fieldset>
+</form>
+{{/configMode}}
+
+
 </script>
 <script src="dist/app.js"></script>
 <script>
+var idTs = function(_id) {
+  return new Date(parseInt(_id.substring(0, 8), 16) * 1000);
+}
+var apiHostname = function() {
+      if (this.get('config.api_url')) {
+        return new URL(this.get('config.api_url')).hostname;
+      }
+      return '';
+}
+
 function status(response) {
   if (response.status >= 200 && response.status < 300) {
     return Promise.resolve(response);
@@ -85,12 +113,10 @@ function status(response) {
 function json(response) {
   return response.json();
 }
-
-var BaseRactive = Ractive.extend({
-  mode: 'localStorage',
+var ractive = new Ractive({
   loadConfig: function(callback) {
     var that = this;
-    if (this.mode == 'localStorage') {
+    if (this.get('mode') == 'localStorage') {
       var conf = JSON.parse(localStorage.getItem('blobmarks_config'));
       if (conf) {
         that.set('config', conf);
@@ -126,14 +152,6 @@ var BaseRactive = Ractive.extend({
     headers['Authorization'] = 'Basic ' + btoa(":" + this.get('config.api_key'));
     return headers;
   },
-});
-var ractive = new BaseRactive({
-  // The `el` option can be a node, an ID, or a CSS selector.
-  el: '#container',
-
-  // We could pass in a string, but for the sake of convenience
-  // we're passing the ID of the <script> tag above.
-  template: '#template',
   loadBookmarks: function() {
     console.log('loadBookmarks');
     var that = this;
@@ -162,9 +180,13 @@ fetch(that.url(), {
         console.log('bookmarks', data);
         that.set('bookmarks', data);
     });
-
-
   },
+  // The `el` option can be a node, an ID, or a CSS selector.
+  el: '#container',
+
+  // We could pass in a string, but for the sake of convenience
+  // we're passing the ID of the <script> tag above.
+  template: '#template',
   complete: function() {
         let otpInput = document.getElementById("otp");
         console.log('otpInput', otpInput);
@@ -173,12 +195,21 @@ fetch(that.url(), {
   },
   oninit: function() {
     var that = this;
+    if (chrome) {
+      this.set('mode', 'extension');
+    }
     this.loadConfig(function() {
       that.loadBookmarks();
     });
     this.on('save-config', function(event) {
       event.original.preventDefault();
-      localStorage.setItem('blobmarks_config', JSON.stringify(this.get('config')));
+      if (this.get('mode') == 'localStorage') {
+        localStorage.setItem('blobmarks_config', JSON.stringify(this.get('config')));
+      } else {
+        chrome.storage.local.set(this.get('config'), function() {
+          console.log('SAVED');
+        });
+      }
       this.set('configured', true);
       this.set('configMode', false);
     });
@@ -215,18 +246,12 @@ fetch(that.url(), {
   },
   data: {
     q: '',
-    idTs: function(_id) {
-      return new Date(parseInt(_id.substring(0, 8), 16) * 1000);
-    },
-    apiHostname: function() {
-      if (this.get('config.api_url')) {
-        return new URL(this.get('config.api_url')).hostname;
-      }
-      return '';
-    },
+    idTs: idTs,
+    apiHostname: apiHostname,
     configured: false,
     configMode: true,
     config: { collection: 'blobmarks' },
+    mode: 'localStorage',
   },
 });
 </script>
