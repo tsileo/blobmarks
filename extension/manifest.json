@@ -1,0 +1,18 @@
+{
+  "applications": {
+    "gecko": {
+      "id": "blobmarks@a4.io",
+      "strict_min_version": "47.0a1"
+    }
+  },
+  "browser_action": {
+      "default_title": "BlobMarks",
+      "default_popup": "popup.html"
+  },
+  "description": "",
+  "homepage_url": "https://github.com/tsileo/blobmarks",
+  "manifest_version": 2,
+  "permissions": ["storage"],
+  "name": "BlobMarks",
+  "version": "1.0"
+}

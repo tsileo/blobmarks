@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <link rel="stylesheet" href="pure-min.css"/>
+    <style>
+    html, body {
+      width: 320px;
+      height: 230px;
+    }
+    .pure-menu-heading {
+      border-bottom: 1px solid #eee;
+    }
+    </style>
+  </head>
+<body>
+<div id='container'></div>
+<script id='template' type='text/ractive'>
+{{^config.done}}
+<form class="pure-form pure-form-stacked">
+  <input value="{{api_url}}" type="text" placeholder="BlobStash URL (https://blobs...)">
+  <input value="{{collection}}" type="text" placeholder="Docstore collection (e.g. blobmarks)">
+  <input value="{{api_key}}" type="password" placeholder="API Key">
+  <button class="pure-button pure-button-primary" on-click="save">Save</button>
+</form>
+{{/config.done}}
+{{#config.done}}
+<div class="pure-menu">
+<span class="pure-menu-heading">BlobMarks</span>
+
+<ul class="pure-menu-list">
+<li class="pure-menu-item{{#bookmarked}} pure-menu-disabled{{/bookmarked}}">{{#bookmarked}}Already bookmarked{{else}}
+<a href="#" on-click="bookmark" class="pure-menu-link">Bookmark</a>{{/bookmarked}}</li>
+<li class="pure-menu-item"><a href="#" on-click="open-tab" class="pure-menu-link">Open Tab</a></li>
+<span class="pure-menu-heading">Latest</span>
+{{#latest}}
+<li class="pure-menu-item"><a href="#" on-click="open-bookmark:{{this}}" class="pure-menu-link">{{title}}</a></li>
+{{/latest}}
+</ul>
+</div> 
+{{/config.done}}
+</script>
+<script src="ractive.js"></script>
+<script src="base.js"></script>
+<script>
+var ractive = new BaseRactive({
+  // The `el` option can be a node, an ID, or a CSS selector.
+  el: '#container',
+
+  // We could pass in a string, but for the sake of convenience
+  // we're passing the ID of the <script> tag above.
+  template: '#template',
+  loadLatest: function() {
+    var that = this;
+          // Fetch the 3 latest bookmarks
+          fetch(that.url('?limit=3'), {
+            mode: 'cors',
+            method: 'get',
+            headers: that.headers(),
+          }).then(status)
+            .then(json)
+            .then(function(data) {
+              console.log('latest', data);
+              that.set('latest', data.splice(0, 3));
+          });
+  },
+  oninit: function() {
+    var that = this;
+    // Start by loading the config
+    this.loadConfig();
+
+    // Inject the script to extract the url/title/selectedText of the active tab
+    chrome.tabs.executeScript(null, {
+      file: "/content_scripts/clip.js"
+    });
+
+    // Get back the active tab data
+    this.on('bookmark-data', function(request) {
+      var that = this;
+      console.log('current_page=', request);
+      this.set('current_page', request);
+
+      // Check if the active tab is already bookmarked
+      fetch(that.url('?query={"url": "'+request.url+'"}'), {
+        mode: 'cors',
+        method: 'get',
+        headers: that.headers(),
+      }).then(status)
+        .then(json)
+        .then(function(data) {
+          if (data.length > 0) {
+            console.log('already bookmarked');
+            that.set('bookmarked', true);
+          }
+
+          that.loadLatest();
+
+
+      });
+    });
+
+    this.on('save', function(event) {
+      event.original.preventDefault();
+      that.set('config.done', true);
+      chrome.storage.local.set({
+        'done': true,
+        'api_url': that.get('api_url'),
+        'collection': that.get('collection'),
+        'api_key': that.get('api_key'),
+      }, function() {
+        console.log('SAVED');
+      });
+    });
+    this.on('open-bookmark', function(event, bookmark) {
+      event.original.preventDefault();
+      chrome.tabs.create({
+        "url": bookmark.url,
+      });
+    });
+    this.on('open-tab', function(event) {
+      event.original.preventDefault();
+      chrome.tabs.create({
+        "url": chrome.extension.getURL("tab.html")
+      });
+    });
+    // TODO(tsileo):
+    // - move the executeScript in the `oninit` and save the result in data (needed for checking the url)
+    // - create the index at config time
+    // - fetch(that.url('?query={"url":'++'}'), {...
+    // - fetch the 3 latest bookmarks display them with cut (x chars + "...")
+    // - explore also saving the favicon?
+    // - display a dead link for "already bookmarked"
+    // - catch/show error
+    // - make the config editable? from the ui in a tab instead of inside the popup?
+    // - show a search bar? or open the ui in tab?
+    // - remove pure.min.css requirements? no
+    // - Display note for Ractive.js
+    this.on('bookmark', function(event) {
+      console.log('bookmark event', event);
+      var that = this;
+      event.original.preventDefault();
+      fetch(that.url(), {
+        mode: 'cors',
+        method: 'post',
+        headers: that.headers({'BlobStash-DocStore-IndexFullText': '1'}),
+        body: JSON.stringify(that.get('current_page')),
+      }).then(function() {
+        that.set('bookmarked', true);
+        that.loadLatest();
+      });
+    });
+  },
+  data: { config: { done: false }, bookmarked: false },
+  url: function(path) {
+    return this.get('config.api_url') + '/api/ext/docstore/v1/' + this.get('config.collection') + (path || '');
+  },
+  headers: function(headers) {
+    headers = headers || {};
+    headers['Content-Type'] = 'application/json';
+    headers["Authorization"] = "Basic " + btoa(":" + this.get('config.api_key'));
+    return headers;
+  },
+});
+
+chrome.runtime.onMessage.addListener(
+  function(request, sender, sendResponse) {
+    console.log('received from ext:');
+    console.log(request);
+    ractive.fire('bookmark-data', request);
+  }
+);
+</script>
+</body>
+</html>
