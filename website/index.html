@@ -3,55 +3,7 @@
   <head>
     <meta charset="utf-8">
 	<meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="extension/pure-min.css"/>
-    <style>
-  #container {
-    margin:20px auto;
-    width: 95%;
-    max-width: 960px;
-  }
-  h1, h2 { color: #333; }
-  h2 span { color: #aaa; }
-  h3, p { color: #555; }
-  a {
-    text-decoration: none;
-  }
-  .conf-link {
-    color: #aaa;
-    display: inline-block;
-    padding-top:22px;
-  }
-  .link {
-    color: #555;
-    text-decoration: underline;
-  }
-  .grey {
-    color: #aaa;
-  }
-  h2 > small { color: #ccc;font-weight:normal; }
-  .floatright {
-margin-top:10px;float:right;
-  }
-html {
-    position: relative;
-    min-height: 100%;
-}
-body {
-    margin: 0 0 50px;
-}
-#footer {
-    position: absolute;
-    left: 0;
-    bottom: 0;
-    height: 50px;
-    width: 100%;
-color: #ccc;
-  padding-top:20px;
-  }
-  #footer a {
-    color: #aaa;
-  }
-    </style>
+    <link rel="stylesheet" href="dist/app.css"/>
   </head>
 <body>
 <div id='container'></div>
@@ -76,7 +28,6 @@ color: #ccc;
 </div>
 </div>
 
-<a class="conf-link" href="#" on-click="toggle-conf">Show/hide configuration</a> 
 {{#configMode}}
 <h3>Configuration</h3>
 <form class="pure-form pure-form-aligned" on-submit="save-config">
@@ -116,9 +67,12 @@ color: #ccc;
 {{/bookmarks}}
 </div>
 {{/config.api_key}}
+
+<div id="footer">
+<a class="conf-link" href="#" on-click="toggle-conf">Show/hide configuration</a> 
+</div>
 </script>
-<script src="extension/ractive.js"></script>
-<script src="base.js"></script>
+<script src="dist/app.js"></script>
 <script>
 function status(response) {
   if (response.status >= 200 && response.status < 300) {
