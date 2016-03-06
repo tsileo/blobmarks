@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <link rel="stylesheet" href="dist/app.css"/>
   </head>
 <body>
@@ -44,7 +44,7 @@
 {{/bookmarks}}
 {{#bookmarks}}
 <div style="margin:20px 0 40px 0;">
-<a style="display:block" href="#" on-click="open-bookmark:{{this}}">
+<a style="display:block" href="{{url}}" on-click="open-bookmark:{{this}}">
 <h3 style="padding:0;margin:0 0 5px 0;">{{title}}</h3>
 <p style="padding:0;margin:0 0 10px 0;" class="grey">{{ idTs(_id) }}</p>
 {{#selectedText}}<p class="grey" style="padding:0;margin:0 0 10px 0;">{{selectedText}}</p>{{/selectedText}}
@@ -116,27 +116,21 @@ function json(response) {
 var ractive = new Ractive({
   loadConfig: function(callback) {
     var that = this;
+    var config;
     if (this.get('mode') == 'localStorage') {
       var conf = JSON.parse(localStorage.getItem('blobmarks_config'));
       if (conf) {
         that.set('config', conf);
-        callback(conf);
-        that.set('configured', true);
-        that.set('configMode', false);
-        console.log('loaded conf', conf);
-        //document.getElementById("otp").focus();
       }
     } else {
       chrome.storage.local.get(['api_url', 'api_key', 'collection'], function(config) {
-        console.log(config);
         that.set('config', config);
-        that.set('configured', true);
-        that.set('configMode', false);
-        callback(config);
-        //document.getElementById("otp").focus();
-      })
+      });
     }
-  },
+    that.set('configured', true);
+    that.set('configMode', false);
+    callback(that.get('config'));
+},
   url: function(path) {
     var that = this;
     var path = path || '';
@@ -156,18 +150,18 @@ var ractive = new Ractive({
     console.log('loadBookmarks');
     var that = this;
     if (that.get('config.collection')) {
-fetch(that.url(), {
-      mode: 'cors',
-      method: 'get',
-      headers: that.headers(),
-    }).then(status)
-      .then(json)
-      .then(function(data) {
-        console.log('bookmarks', data);
-        that.set('bookmarks', data);
-    });
+      fetch(that.url(), {
+        mode: 'cors',
+        method: 'get',
+        headers: that.headers(),
+      }).then(status)
+        .then(json)
+        .then(function(data) {
+          console.log('bookmarks', data);
+          that.set('bookmarks', data);
+      });
     }
-      },
+  },
   search: function(q) {
     var that = this;
     fetch(that.url('/search?q='+q), {
@@ -181,11 +175,7 @@ fetch(that.url(), {
         that.set('bookmarks', data);
     });
   },
-  // The `el` option can be a node, an ID, or a CSS selector.
   el: '#container',
-
-  // We could pass in a string, but for the sake of convenience
-  // we're passing the ID of the <script> tag above.
   template: '#template',
   complete: function() {
         let otpInput = document.getElementById("otp");
@@ -195,8 +185,13 @@ fetch(that.url(), {
   },
   oninit: function() {
     var that = this;
-    if (chrome) {
-      this.set('mode', 'extension');
+    try {
+      if (chrome) {
+        this.set('mode', 'extension');
+      }
+    }
+    catch(err) {
+      console.log('not in the extension');
     }
     this.loadConfig(function() {
       that.loadBookmarks();
@@ -242,6 +237,15 @@ fetch(that.url(), {
     this.on('toggle-conf', function(event) {
       event.original.preventDefault();
       this.set('configMode', !this.get('configMode'));
+    });
+    this.on('open-bookmark', function(event, bookmark) {
+      if (this.mode == 'extension') {
+        // Hook the event to open a new tab if we're in the extension
+        event.original.preventDefault();
+        chrome.tabs.create({
+          "url": bookmark.url,
+        });
+      }
     });
   },
   data: {
