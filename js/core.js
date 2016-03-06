@@ -21,30 +21,28 @@ function json(response) {
 }
 
 var BaseRactive = Ractive.extend({
-  mode: 'localStorage',
   loadConfig: function(callback) {
     var that = this;
-    if (this.mode == 'localStorage') {
+    var config;
+    if (this.get('mode') == 'localStorage') {
       var conf = JSON.parse(localStorage.getItem('blobmarks_config'));
       if (conf) {
         that.set('config', conf);
-        callback(conf);
+        console.log('loadConfig');
         that.set('configured', true);
         that.set('configMode', false);
-        console.log('loaded conf', conf);
-        //document.getElementById("otp").focus();
-      }
+        callback(that.get('config'));
+}
     } else {
       chrome.storage.local.get(['api_url', 'api_key', 'collection'], function(config) {
-        console.log(config);
         that.set('config', config);
-        that.set('configured', true);
-        that.set('configMode', false);
-        callback(config);
-        //document.getElementById("otp").focus();
-      })
+      console.log('loadConfig');
+      that.set('configured', true);
+      that.set('configMode', false);
+      callback(that.get('config'));
+  });
     }
-  },
+      },
   url: function(path) {
     var that = this;
     var path = path || '';
@@ -60,36 +58,6 @@ var BaseRactive = Ractive.extend({
     headers['Authorization'] = 'Basic ' + btoa(":" + this.get('config.api_key'));
     return headers;
   },
-  loadBookmarks: function() {
-    console.log('loadBookmarks');
-    var that = this;
-    if (that.get('config.collection')) {
-fetch(that.url(), {
-      mode: 'cors',
-      method: 'get',
-      headers: that.headers(),
-    }).then(status)
-      .then(json)
-      .then(function(data) {
-        console.log('bookmarks', data);
-        that.set('bookmarks', data);
-    });
-    }
-      },
-  search: function(q) {
-    var that = this;
-    fetch(that.url('/search?q='+q), {
-      mode: 'cors',
-      method: 'get',
-      headers: that.headers(),
-    }).then(status)
-      .then(json)
-      .then(function(data) {
-        console.log('bookmarks', data);
-        that.set('bookmarks', data);
-    });
-
-
-  },
+  data: {mode: 'localStorage'},
 });
 

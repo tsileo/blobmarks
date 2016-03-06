@@ -2,7 +2,7 @@
 <html>
   <head>
     <meta charset="utf-8">
-    <link rel="stylesheet" href="pure-min.css"/>
+    <link rel="stylesheet" href="dist/popup.css"/>
     <style>
     html, body {
       width: 320px;
@@ -16,15 +16,7 @@
 <body>
 <div id='container'></div>
 <script id='template' type='text/ractive'>
-{{^config.done}}
-<form class="pure-form pure-form-stacked">
-  <input value="{{api_url}}" type="text" placeholder="BlobStash URL (https://blobs...)">
-  <input value="{{collection}}" type="text" placeholder="Docstore collection (e.g. blobmarks)">
-  <input value="{{api_key}}" type="password" placeholder="API Key">
-  <button class="pure-button pure-button-primary" on-click="save">Save</button>
-</form>
-{{/config.done}}
-{{#config.done}}
+{{#configured}}
 <div class="pure-menu">
 <span class="pure-menu-heading">BlobMarks</span>
 
@@ -38,10 +30,11 @@
 {{/latest}}
 </ul>
 </div> 
-{{/config.done}}
+{{else}}
+<a href="#" on-click="open-tab" class="pure-menu-link">Open Configuration Tab</a>
+{{/configured}}
 </script>
-<script src="ractive.js"></script>
-<script src="base.js"></script>
+<script src="dist/popup.js"></script>
 <script>
 var ractive = new BaseRactive({
   // The `el` option can be a node, an ID, or a CSS selector.
@@ -67,11 +60,12 @@ var ractive = new BaseRactive({
   oninit: function() {
     var that = this;
     // Start by loading the config
-    this.loadConfig();
+    this.loadConfig(function() {
+      // Inject the script to extract the url/title/selectedText of the active tab
+      chrome.tabs.executeScript(null, {
+        file: "/content_scripts/clip.js"
+      });
 
-    // Inject the script to extract the url/title/selectedText of the active tab
-    chrome.tabs.executeScript(null, {
-      file: "/content_scripts/clip.js"
     });
 
     // Get back the active tab data
@@ -96,19 +90,6 @@ var ractive = new BaseRactive({
           that.loadLatest();
 
 
-      });
-    });
-
-    this.on('save', function(event) {
-      event.original.preventDefault();
-      that.set('config.done', true);
-      chrome.storage.local.set({
-        'done': true,
-        'api_url': that.get('api_url'),
-        'collection': that.get('collection'),
-        'api_key': that.get('api_key'),
-      }, function() {
-        console.log('SAVED');
       });
     });
     this.on('open-bookmark', function(event, bookmark) {
@@ -150,15 +131,12 @@ var ractive = new BaseRactive({
       });
     });
   },
-  data: { config: { done: false }, bookmarked: false },
-  url: function(path) {
-    return this.get('config.api_url') + '/api/ext/docstore/v1/' + this.get('config.collection') + (path || '');
-  },
-  headers: function(headers) {
-    headers = headers || {};
-    headers['Content-Type'] = 'application/json';
-    headers["Authorization"] = "Basic " + btoa(":" + this.get('config.api_key'));
-    return headers;
+  data: { mode: 'extension', bookmarked: false,
+   q: '',
+    idTs: idTs,
+    apiHostname: apiHostname,
+    configured: false,
+    configMode: true,
   },
 });
 
